@@ -1,0 +1,7 @@
+matplotlib
+pandas
+matplotlib
+opencv-python
+numpy
+seaborn
+seaborn-image
