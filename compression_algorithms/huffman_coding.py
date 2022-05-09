@@ -1,145 +1,141 @@
-"""
- 1. create a priority Queue Q consisting of each unique character
- 
- """
-import cv2 as cv
-import json
-from itertools import  zip_longest
-import numpy as np
-import matplotlib.pyplot as plt
+from .node import Node
+
+from numpy import histogram, unique, sqrt, count_nonzero
+from cv2 import imread, IMREAD_GRAYSCALE
 
 
-class Node:
+class HuffmanCoding:
+    def __init__(self, image_location):
+        self.codes = dict()
+        self.image_array = imread(image_location, IMREAD_GRAYSCALE)
+        self.tree = list()
 
-    def __init__(
-                self,
-                prob,
-                pixel,
-                left=None,
-                right=None,
-    ) -> None:
+    def calculate_probability(self):
         """
+        :return:
         """
-        self.left = left
-        self.right = right
-        self.pixel = pixel
-        self.prob = prob
+        unique_values = unique(self.image_array)
+        prob = histogram(self.image_array, unique_values)[0] / self.image_array.size
 
-        self.code = ''
+        return dict(zip(unique_values, prob))
 
-def calculate_probability(data):
-    """
-    The function calculates the probability for a given data.
-    """
-    pixels_prob = dict()
-    for pixel in np.nditer(data):
-        if pixels_prob.get(int(pixel)) is None:
-            pixels_prob[int(pixel)] = (1 / 65536)
-        else:
-            pixels_prob[int(pixel)] += (1 / 65536)
-    return pixels_prob
+    def make_node(self, ordered_prob):
+        """
+        :param ordered_prob:
+        :return:
+        """
+        for pixel in ordered_prob.keys():
+            node = Node(pixel=pixel,
+                        prob=ordered_prob[pixel])
+            self.tree.append(node)
 
-def calculate_codes(node, val=''):
-    """
+    def add_codes(self, node, bin_value=''):
+        """
+        :param node:
+        :param bin_value:
+        :return:
+        """
+        new_bin_value = bin_value + str(node.code)
 
-    :param node:
-    :param val:
-    :return:
-    """
-    newVal = val + str(node.code)
+        if node.left:
+            self.add_codes(node.left, new_bin_value)
 
-    if node.left:
-        calculate_codes(node.left, newVal)
-    if node.right:
-        calculate_codes(node.right, newVal)
+        if node.right:
+            self.add_codes(node.right, new_bin_value)
 
-    if not node.left and not node.right:
-        codes[node.pixel] = newVal
+        if not node.left and not node.right:
+            self.codes[node.pixel] = new_bin_value
 
-    return codes
+    def calculate_rmse(self, image, compressed):
+        """
+        Calculates the Root Mean Squared Error
 
-"""
-def add_missing_probabilities(pixels_prob):
-    for pixel in range(256):
-        if pixel not in pixels_prob.keys():
-            pixels_prob[pixel] = 0
-    return pixels_prob
-"""
+        :param image: original image in ndarray
+        :param compressed: compressed image in ndarray
+        :return: a float rmse value
+        """
+        image = image.flatten()
+        compressed = compressed.flatten()
 
-def output_encoding(img_data, huffman_encoding):
-    """
-    :param img_data:
-    :param huffman_encoding:
-    :return:
-    """
-    print(huffman_encoding)
-    encoding_output = list()
-    encoding_output = [code for code in huffman_encoding.values()]
-    encoding_output_str = "".join(item for item in encoding_output)
+        return sqrt(((compressed - image)**2).mean())
 
-    return encoding_output_str
+    def total_gain(self):
+        before_compression = self.image_array.size * 8
+        after_compression = 0
 
-def huffman_decoding(encoded_data, huffman_tree):
-    decoded_upput = []
-    for code in encoded_data:
-        if code == 1:
-            huffman_tree = huffman_tree.right
-        elif code == 0:
-            huffman_tree = huffman_tree.left
-        try:
-            if huffman_tree.left.pixel is None and huffman_tree.left.pixel is None:
-                pass
-        except AttributeError:
-            decoded_upput.append(huffman_tree.pixel)
-    string_code = "".join([code for code in decoded_upput])
-    return string_code
+        for pixel in self.codes.keys():
+            count = count_nonzero(self.image_array == pixel)
+            after_compression += count * len(self.codes[pixel])
 
+        print("Space before compression: {} bits".format(before_compression))
+        print("Space after compression: {} bits".format(after_compression))
 
+    def get_encoded_output(self):
+        encoded_output = list()
+        for prob in self.codes.values():
+            encoded_output.append(prob)
 
-def huffman_encoding(img_data):
+        encoded_output_str = ''.join([str(pixel_prob) for pixel_prob in encoded_output])
 
-    nodes = []
+        return encoded_output_str
 
-    for pixel in pixels_prob.keys():
-        nodes.append(Node(pixels_prob.get(pixel), pixel))
+    def decode(self, encoded_output, huffman_tree):
+        """
+        :param encoded_output:
+        :param huffman_tree:
+        :return:
+        """
+        tree_head = huffman_tree
+        decoded_output = list()
+        for bin_value in encoded_output:
+            if bin_value == '1':
+                huffman_tree = huffman_tree.right
+            elif bin_value == '0':
+                huffman_tree = huffman_tree.left
+            try:
+                if huffman_tree.left.symbol is None and huffman_tree.right.symbol is None:
+                    pass
+            except AttributeError:
+                decoded_output.append(huffman_tree.symbol)
+                huffman_tree = tree_head
+        decoded_output_str = ''.join([str(pixel_prob) for pixel_prob in decoded_output])
 
-    print(nodes)
+        return decoded_output_str
 
-    while len(nodes) > 1:
-        nodes = sorted(nodes, key=lambda x:x.prob)
+    def encode(self):
+        """
+        :return:
+        """
+        ordered_probabilities = self.calculate_probability()
 
-        # pick the smallest nodes
-        right = nodes[0]
-        left = nodes[1]
+        for pixel in ordered_probabilities.keys():
+            node = Node(pixel=pixel,
+                        prob=ordered_probabilities[pixel])
+            self.tree.append(node)
 
-        left.code = 0
-        left.code = 1
+        while len(self.tree) > 1:
+            self.tree = sorted(self.tree, key=lambda x: x.prob)
 
-        # combine the two nodes create a new one
-        new_node = Node(left.prob+right.prob, left.pixel+right.pixel, left, right)
+            left_node = self.tree.pop(0)
+            right_node = self.tree.pop(0)
 
-        nodes.remove(left)
-        nodes.remove(right)
-        nodes.append(new_node)
-    he = calculate_codes(nodes[0])
-    encoded_ouptut = output_encoding(img_data, he)
+            left_node.code = 0
+            right_node.code = 1
 
-    return encoded_ouptut, nodes[0]
+            new_node = Node(pixel=left_node.pixel + right_node.pixel,
+                            prob=left_node.prob + right_node.prob,
+                            left=left_node,
+                            right=right_node)
 
+            self.tree.append(new_node)
+            print(self.tree)
 
+        # generate a list of huffman code for each pixel
+        self.add_codes(node=self.tree[0])
 
-img = cv.imread("../images/8-bit-256-x-256-Grayscale-Lena-Image.png", cv.IMREAD_GRAYSCALE)
-print(img.shape)
+        encoded_output_str = self.get_encoded_output()
 
-
-pixels_prob = calculate_probability(img)
-
-print(pixels_prob)
-codes = dict()
-encoding, tree = huffman_encoding(img_data=pixels_prob)
-print("encoding output", encoding)
-print("decoded output", huffman_decoding(encoded_data=encoding, huffman_tree=tree))
-
+        return encoded_output_str
 
 
 

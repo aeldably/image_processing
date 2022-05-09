@@ -2,3 +2,5 @@
 .image_venv/
 .ipynb_checkpoints/
 image_venv/
+.DS_Store
+compression_algorithms/__pycache__/
